@@ -192,53 +192,93 @@ impl<T> QueueContainer<T> for DfsQueue<T> {
     }
 }
 
-fn run_search_algorithm<Q>(
-    memory: &Memory,
-    mappings: &GraphMappings,
-    source: ValueId,
-    target: ValueId,
-) -> (Q, Option<Vec<NodeId>>)
+struct SearchAlgorithmIter<'a, Q>
 where
     Q: QueueContainer<Vec<NodeId>>,
 {
-    let mut visited = HashSet::from([NodeId::Value(source)]);
-    let mut queue = Q::new(vec![NodeId::Value(source)]);
-    while let Some(path) = queue.pop() {
-        if *path.last().unwrap() == NodeId::Value(target) {
-            return (queue, Some(path));
+    mappings: &'a GraphMappings,
+
+    visited: HashSet<NodeId>,
+    queue: Q,
+
+    target: ValueId,
+}
+
+impl<'a, Q> Iterator for SearchAlgorithmIter<'a, Q>
+where
+    Q: QueueContainer<Vec<NodeId>>,
+{
+    type Item = Vec<NodeId>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(path) = self.queue.pop() {
+            if *path.last().unwrap() == NodeId::Value(self.target) {
+                return Some(path);
+            }
+
+            match *path.last().unwrap() {
+                NodeId::Step(id) => {
+                    self.queue.extend(
+                        self.mappings[id]
+                            .iter()
+                            .copied()
+                            .filter(|x| self.visited.insert(NodeId::Value(*x)))
+                            // .filter(|x| {
+                            //     // Ensure that the value has not increased (gas cannot increase).
+                            //     dbg!(memory[x.0].unwrap())
+                            //         <= path
+                            //             .split_last()
+                            //             .unwrap()
+                            //             .1
+                            //             .iter()
+                            //             .rev()
+                            //             .find_map(|id| match id {
+                            //                 NodeId::Step(_) => None,
+                            //                 NodeId::Value(id) => Some(dbg!(memory[id.0].unwrap())),
+                            //             })
+                            //             .unwrap()
+                            // })
+                            .map(|x| {
+                                let mut new_path = path.clone();
+                                new_path.push(NodeId::Value(x));
+                                new_path
+                            }),
+                    );
+                }
+                NodeId::Value(id) => {
+                    self.queue.extend(
+                        self.mappings[id]
+                            .iter()
+                            .copied()
+                            .filter(|x| self.visited.insert(NodeId::Step(*x)))
+                            .map(|x| {
+                                let mut new_path = path.clone();
+                                new_path.push(NodeId::Step(x));
+                                new_path
+                            }),
+                    );
+                }
+            }
         }
 
-        match *path.last().unwrap() {
-            NodeId::Step(id) => {
-                queue.extend(
-                    mappings[id]
-                        .iter()
-                        .copied()
-                        .filter(|x| visited.insert(NodeId::Value(*x)))
-                        .map(|x| {
-                            let mut new_path = path.clone();
-                            new_path.push(NodeId::Value(x));
-                            new_path
-                        }),
-                );
-            }
-            NodeId::Value(id) => {
-                queue.extend(
-                    mappings[id]
-                        .iter()
-                        .copied()
-                        .filter(|x| visited.insert(NodeId::Step(*x)))
-                        .map(|x| {
-                            let mut new_path = path.clone();
-                            new_path.push(NodeId::Step(x));
-                            new_path
-                        }),
-                );
-            }
-        }
+        None
     }
+}
 
-    (queue, None)
+fn run_search_algorithm<Q>(
+    mappings: &GraphMappings,
+    source: ValueId,
+    target: ValueId,
+) -> SearchAlgorithmIter<Q>
+where
+    Q: QueueContainer<Vec<NodeId>>,
+{
+    SearchAlgorithmIter {
+        mappings,
+        visited: HashSet::from([NodeId::Value(source)]),
+        queue: Q::new(vec![NodeId::Value(source)]),
+        target,
+    }
 }
 
 fn main() {
@@ -292,31 +332,35 @@ fn main() {
     //
     // Find a path between the source and target nodes.
     //
-    println!("Search algorithm started.");
-    let (queue, path) =
-        run_search_algorithm::<DfsQueue<_>>(&memory, &mappings, source_value, target_value);
-    println!(
-        "Search algorithm finished in {} steps.",
-        queue.current_step()
-    );
+    // Queue containers:
+    //   - BfsQueue: Will find the shortest path using the BFS algorithm.
+    //   - Dfsqueue: Will find the left-most path using the DFS algorithm.
+    //
+    println!("Starting search algorithm.");
+    let mut iter = run_search_algorithm::<BfsQueue<_>>(&mappings, source_value, target_value);
+    println!();
     println!();
 
-    match path {
-        None => println!("No connecting path found."),
-        Some(path) => {
-            println!("Connecting path:");
-            for id in path {
-                match id {
-                    NodeId::Step(offset) => {
-                        println!("{}", decode_instruction(&memory, trace[offset.0].pc));
-                        println!("    {:?}", trace[offset.0]);
-                    }
-                    NodeId::Value(offset) => {
-                        println!("  [{}] = {}", offset.0, memory[offset.0].unwrap());
-                        println!();
-                    }
+    let mut num_solutions = 0;
+    while let Some(path) = iter.next() {
+        num_solutions += 1;
+
+        println!("Found solution at step {}.", iter.queue.current_step());
+        println!("Connecting path (spans {} steps):", path.len() >> 1);
+        for id in path {
+            match id {
+                NodeId::Step(offset) => {
+                    println!("{}", decode_instruction(&memory, trace[offset.0].pc));
+                    println!("    {:?}", trace[offset.0]);
+                }
+                NodeId::Value(offset) => {
+                    println!("  [{}] = {}", offset.0, memory[offset.0].unwrap());
+                    println!();
                 }
             }
         }
+        println!();
     }
+
+    println!("Done! Found {num_solutions} solutions.");
 }
