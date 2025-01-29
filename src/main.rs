@@ -74,7 +74,8 @@ fn main() {
     //   - DfsQueue: Will find the left-most path using the DFS algorithm.
     //
     println!("Starting search algorithm.");
-    let mut iter = run_search_algorithm::<DfsQueue<_>>(&mappings, source_value, target_value);
+    let mut iter =
+        run_search_algorithm::<DfsQueue<_>>(&memory, &mappings, source_value, target_value);
     println!();
     println!();
 

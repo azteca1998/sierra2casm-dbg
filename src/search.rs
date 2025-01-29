@@ -1,4 +1,4 @@
-use crate::{GraphMappings, StepId, ValueId};
+use crate::{GraphMappings, Memory, StepId, ValueId};
 use std::collections::VecDeque;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -82,6 +82,7 @@ pub struct SearchAlgorithmIter<'a, Q>
 where
     Q: QueueContainer<Vec<NodeId>>,
 {
+    memory: &'a Memory,
     mappings: &'a GraphMappings,
 
     // visited: HashSet<NodeId>,
@@ -125,6 +126,21 @@ where
                                 // self.visited.insert(NodeId::Value(*x))
                                 !path.contains(&NodeId::Value(*x))
                             })
+                            // .filter(|curr_id| {
+                            //     // When searching for gas paths, the gas should not increase.
+                            //     let prev_id = path
+                            //         .split_last()
+                            //         .unwrap()
+                            //         .1
+                            //         .iter()
+                            //         .rev()
+                            //         .find_map(|x| match x {
+                            //             NodeId::Step(_) => None,
+                            //             NodeId::Value(id) => Some(id),
+                            //         })
+                            //         .unwrap();
+                            //     self.memory[prev_id.0].unwrap() >= self.memory[curr_id.0].unwrap()
+                            // })
                             .map(|x| {
                                 let mut new_path = path.clone();
                                 new_path.push(NodeId::Value(x));
@@ -141,6 +157,18 @@ where
                                 // self.visited.insert(NodeId::Step(*x))
                                 !path.contains(&NodeId::Step(*x))
                             })
+                            .filter(|curr_id| {
+                                // StepId should only increase.
+                                let prev_id = path.iter().rev().find_map(|x| match x {
+                                    NodeId::Step(id) => Some(id),
+                                    NodeId::Value(_) => None,
+                                });
+
+                                match prev_id {
+                                    Some(prev_id) => curr_id.0 > prev_id.0,
+                                    None => true,
+                                }
+                            })
                             .map(|x| {
                                 let mut new_path = path.clone();
                                 new_path.push(NodeId::Step(x));
@@ -155,15 +183,17 @@ where
     }
 }
 
-pub fn run_search_algorithm<Q>(
-    mappings: &GraphMappings,
+pub fn run_search_algorithm<'a, Q>(
+    memory: &'a Memory,
+    mappings: &'a GraphMappings,
     source: ValueId,
     target: ValueId,
-) -> SearchAlgorithmIter<Q>
+) -> SearchAlgorithmIter<'a, Q>
 where
     Q: QueueContainer<Vec<NodeId>>,
 {
     SearchAlgorithmIter {
+        memory,
         mappings,
         // visited: HashSet::from([NodeId::Value(source)]),
         queue: Q::new(vec![NodeId::Value(source)]),
