@@ -9,3 +9,6 @@ cairo-lang-casm = { version = "2.9.2", default-features = false }
 cairo-lang-utils = { version = "2.9.2", default-features = false }
 cairo-vm = { version = "1.0.2", default-features = false }
 starknet-types-core = { version = "0.1.7", default-features = false }
+
+[dev-dependencies]
+rayon = "1.10.0"
