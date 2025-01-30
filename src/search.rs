@@ -126,21 +126,32 @@ where
                                 // self.visited.insert(NodeId::Value(*x))
                                 !path.contains(&NodeId::Value(*x))
                             })
-                            // .filter(|curr_id| {
-                            //     // When searching for gas paths, the gas should not increase.
-                            //     let prev_id = path
-                            //         .split_last()
-                            //         .unwrap()
-                            //         .1
-                            //         .iter()
-                            //         .rev()
-                            //         .find_map(|x| match x {
-                            //             NodeId::Step(_) => None,
-                            //             NodeId::Value(id) => Some(id),
-                            //         })
-                            //         .unwrap();
-                            //     self.memory[prev_id.0].unwrap() >= self.memory[curr_id.0].unwrap()
-                            // })
+                            .filter(|curr_id| {
+                                // // When searching for gas paths, the gas should not increase.
+                                // let prev_id = path
+                                //     .split_last()
+                                //     .unwrap()
+                                //     .1
+                                //     .iter()
+                                //     .rev()
+                                //     .find_map(|x| match x {
+                                //         NodeId::Step(_) => None,
+                                //         NodeId::Value(id) => Some(id),
+                                //     })
+                                //     .unwrap();
+                                // self.memory[curr_id.0]
+                                //     .is_some_and(|value| self.memory[prev_id.0].unwrap() >= value)
+
+                                self.memory[curr_id.0].is_some_and(|value| {
+                                    let min_value = 9919468708u64;
+                                    let max_value = 9997035710u64;
+
+                                    // Use half the min value to give some leeway for redeposited
+                                    // gas.
+                                    (value >= (min_value >> 1).into())
+                                    // && (value <= (max_value << 1).into())
+                                })
+                            })
                             .map(|x| {
                                 let mut new_path = path.clone();
                                 new_path.push(NodeId::Value(x));
